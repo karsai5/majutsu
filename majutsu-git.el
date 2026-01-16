@@ -190,8 +190,20 @@ Prompts for SOURCE and optional DEST; uses ARGS."
   :class 'transient-option
   :shortarg "-b"
   :argument "--bookmark="
-  :multi-value 'repeat
-  :reader #'majutsu-read-bookmarks)
+  ;; :multi-value 'repeat
+  ;; :value (lambda () ())
+  :init-value (lambda (obj)
+                (message "obj: %s" obj)
+                "main"
+                )
+  :init-value (lambda(obj)
+                (let ((bookmarks (majutsu-bookmarks-at-point)))
+                  (when (and bookmarks (= (length bookmarks) 1))
+                    (setf (slot-value obj 'value) (car bookmarks))
+                    ))
+                )
+  :reader #'majutsu-read-bookmarks
+  )
 
 ;;; Git Transients
 
