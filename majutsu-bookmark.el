@@ -39,6 +39,26 @@
     (when bookmarks
       (string-join bookmarks ","))))
 
+(defun majutsu--bookmark-head-at-parent ()
+  "Return the head local bookmark from the parent of the working copy.
+Runs `jj log' on `heads(::@- & bookmarks())' to find the most recent
+bookmark that is an ancestor of the parent revision."
+  (let ((output (majutsu-jj-string
+                 "log"
+                 "--revisions" "heads(::@- & bookmarks())"
+                 "--no-graph"
+                 "--ignore-working-copy"
+                 "--color" "never"
+                 "--limit" "1"
+                 "--template" "local_bookmarks")))
+    (when (and output (not (string-empty-p (manjutsu--bookmark-clean-name output))))
+      (manjutsu--bookmark-clean-name output))))
+
+(defun manjutsu--bookmark-clean-name (bookmark-name)
+  "Remove * from beginning of BOOKMARK-NAME and @origin from end of bookmark name."
+(string-trim (string-trim bookmark-name "[ \t\n\r*]+" "[ \t\n\r*]+") "" "@.*$")
+  )
+
 (defun majutsu--extract-bookmark-names (text)
   "Extract bookmark names from jj command output TEXT."
   (let ((names '())
@@ -211,7 +231,8 @@ With prefix ALL, include remote bookmarks."
 (defun majutsu-read-bookmarks (prompt &optional _init-input _history)
   "Return interactive arguments for bookmark move commands."
   (let* ((bookmarks (majutsu--get-bookmark-names))
-         (default (majutsu-bookmark-at-point)))
+         (default (or (majutsu-bookmark-at-point)
+                      (majutsu--bookmark-head-at-parent))))
     (majutsu-completing-read-multiple
      prompt bookmarks nil t nil nil default 'majutsu-bookmark)))
 
