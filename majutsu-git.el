@@ -185,6 +185,12 @@ Prompts for SOURCE and optional DEST; uses ARGS."
       (kill-new dir)
       (message "Git root: %s (copied)" dir))))
 
+
+(defcustom majutsu-git-push-transient-auto-bookmark nil
+  "Auto-select bookmark from jj log when opening git push transient"
+  :group 'majutsu-process
+  :type 'boolean)
+
 (transient-define-argument majutsu-git-push:-b ()
   :description "Bookmark"
   :class 'transient-option
@@ -193,17 +199,12 @@ Prompts for SOURCE and optional DEST; uses ARGS."
   ;; :multi-value 'repeat
   ;; :value (lambda () ())
   :init-value (lambda (obj)
-                (message "obj: %s" obj)
-                "main"
-                )
-  :init-value (lambda(obj)
-                (let ((bookmarks (majutsu-bookmarks-at-point)))
-                  (when (and bookmarks (= (length bookmarks) 1))
-                    (setf (slot-value obj 'value) (car bookmarks))
-                    ))
-                )
-  :reader #'majutsu-read-bookmarks
-  )
+                (message "hello!")
+                (when majutsu-git-push-transient-auto-bookmark
+                  (let ((bookmarks (majutsu-bookmarks-at-point)))
+                    (when (= (length bookmarks) 1)
+                      (setf (slot-value obj 'value) (car bookmarks))))))
+  :reader #'majutsu-read-bookmarks)
 
 ;;; Git Transients
 
