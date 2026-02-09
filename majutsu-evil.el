@@ -138,7 +138,7 @@ This mirrors `evil-collection-magit-adjust-section-bindings'."
     (kbd "g r") #'majutsu-refresh
     (kbd "`") #'majutsu-process-buffer
     (kbd "c") #'majutsu-describe
-    (kbd "C") #'majutsu-commit
+    (kbd "C") #'majutsu-commit-transient
     (kbd "o") #'majutsu-new
     (kbd "e") #'majutsu-edit-changeset
     (kbd "u") #'majutsu-undo
@@ -149,7 +149,9 @@ This mirrors `evil-collection-magit-adjust-section-bindings'."
     (kbd "S") #'majutsu-split
     (kbd "L") #'majutsu-log-transient
     (kbd "b") #'majutsu-bookmark
-    (kbd "G") #'majutsu-git-transient
+    (kbd "gG") #'majutsu-git-transient
+    (kbd "gf") #'majutsu-git-fetch-transient
+    (kbd "gp") #'majutsu-git-push-transient
     (kbd "r") #'majutsu-rebase
     (kbd "_") #'majutsu-revert
     (kbd "V") nil
