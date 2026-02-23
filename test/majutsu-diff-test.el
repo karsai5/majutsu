@@ -1,12 +1,13 @@
 ;;; majutsu-diff-test.el --- Tests for diff section rendering  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2025 0WD0
+;; Copyright (C) 2025-2026 0WD0
 
 ;; Author: 0WD0 <wd.1105848296@gmail.com>
 ;; Maintainer: 0WD0 <wd.1105848296@gmail.com>
-;; Version: 1.0.0
 ;; Keywords: tools, vc
 ;; URL: https://github.com/0WD0/majutsu
+
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
 
@@ -50,17 +51,19 @@
     (magit-section-mode)
     (let* ((inhibit-read-only t)
            (magit-section-inhibit-markers t)
-           (output (string-join
-                    '("foo | 1 +"
-                      "1 file changed, 1 insertion(+), 0 deletions(-)"
-                      "diff --git a/foo b/foo"
-                      "index 1234567..89abcde 100644"
-                      "--- a/foo"
-                      "+++ b/foo"
-                      "@@ -1 +1 @@"
-                      "-foo"
-                      "+bar")
-                    "\n")))
+           (output (propertize
+                    (string-join
+                     '("foo | 1 +"
+                       "1 file changed, 1 insertion(+), 0 deletions(-)"
+                       "diff --git a/foo b/foo"
+                       "index 1234567..89abcde 100644"
+                       "--- a/foo"
+                       "+++ b/foo"
+                       "@@ -1 +1 @@"
+                       "-foo"
+                       "+bar")
+                     "\n")
+                    'fontified nil)))
       (magit-insert-section (diffbuf)
         (magit-insert-section (diff-root)
           (insert output)
@@ -71,17 +74,23 @@
              (children (oref diff-root children))
              (diffstat (seq-find (lambda (sec) (eq (oref sec type) 'diffstat))
                                  children))
+             (diffstat-file (seq-find (lambda (sec)
+                                        (eq (oref sec type) 'jj-file))
+                                      (oref diffstat children)))
              (diff-file (seq-find (lambda (sec)
                                     (and (eq (oref sec type) 'jj-file)
                                          (equal (oref sec value) "foo")))
                                   children)))
         (should (eieio-object-p diffstat))
+        (should (eieio-object-p diffstat-file))
         (should (seq-find (lambda (sec)
                             (and (eq (oref sec type) 'jj-file)
                                  (equal (oref sec value) "foo")))
                           (oref diffstat children)))
         (should (eieio-object-p diff-file))
-        (should (oref diff-file content))))))
+        (should (oref diff-file content))
+        (should-not (text-properties-at 0 (oref diffstat-file value)))
+        (should-not (text-properties-at 0 (oref diff-file value)))))))
 
 (ert-deftest majutsu-diff-remembered-args-filters-only-formatting-options ()
   "Only diff formatting options should be remembered per buffer."
@@ -103,6 +112,26 @@
     (should (equal majutsu-buffer-diff-filesets '("a" "b")))
     (should (equal majutsu-buffer-diff-args '("--summary")))))
 
+(ert-deftest majutsu-diff-revset-falls-back-to-default-args-when-nil ()
+  "`majutsu-diff-revset' should use default formatting args when ARGS is nil."
+  (let (captured-args
+        captured-range)
+    (cl-letf (((symbol-function 'majutsu-setup-buffer-internal)
+               (lambda (_mode _locked bindings &rest _kwargs)
+                 (setq captured-args (cadr (assq 'majutsu-buffer-diff-args bindings))
+                       captured-range (cadr (assq 'majutsu-buffer-diff-range bindings)))
+                 (let ((buffer (generate-new-buffer " *majutsu diff revset*")))
+                   (with-current-buffer buffer
+                     (setq-local majutsu-buffer-diff-args captured-args))
+                   buffer))))
+      (let ((buffer (majutsu-diff-revset "abc123")))
+        (unwind-protect
+            (progn
+              (should (equal captured-args '("--git" "--stat")))
+              (should (equal captured-range '("--revisions=abc123"))))
+          (when (buffer-live-p buffer)
+            (kill-buffer buffer)))))))
+
 (ert-deftest majutsu-diff-dwim-uses-transient-args-when-active ()
   "When called from the transient, DWIM should use current transient args."
   (let ((transient-current-command 'majutsu-diff)
@@ -123,6 +152,115 @@
       (should (equal called-args '("--context=9" "--stat")))
       (should (equal called-files nil))
       (should (equal called-range '("--revisions=abc123"))))))
+
+(ert-deftest majutsu-diff-dwim-inherits-current-buffer-range ()
+  "DWIM should reuse range and filesets from the current diff buffer."
+  (let ((majutsu-direct-use-buffer-arguments 'current)
+        called-args
+        called-files
+        called-range)
+    (with-temp-buffer
+      (majutsu-diff-mode)
+      (setq-local majutsu-buffer-diff-args '("--stat"))
+      (setq-local majutsu-buffer-diff-range '("--from=main" "--to=dev"))
+      (setq-local majutsu-buffer-diff-filesets '("foo" "bar"))
+      (cl-letf (((symbol-function 'majutsu-diff-setup-buffer)
+                 (lambda (args range filesets &rest _)
+                   (setq called-args args
+                         called-files filesets
+                         called-range range)))
+                ((symbol-function 'majutsu-diff--dwim)
+                 (lambda () '(commit . "abc123"))))
+        (call-interactively #'majutsu-diff-dwim)
+        (should (equal called-args '("--stat")))
+        (should (equal called-range '("--from=main" "--to=dev")))
+        (should (equal called-files '("foo" "bar")))))))
+
+(ert-deftest majutsu-diff-dwim-does-not-inherit-range-from-other-buffer ()
+  "DWIM should not reuse range or filesets from other diff buffers."
+  (let ((majutsu-direct-use-buffer-arguments 'always)
+        called-files
+        called-range)
+    (let ((diff-buf (generate-new-buffer " *majutsu diff test*")))
+      (unwind-protect
+          (progn
+            (with-current-buffer diff-buf
+              (majutsu-diff-mode)
+              (setq-local majutsu-buffer-diff-args '("--stat"))
+              (setq-local majutsu-buffer-diff-range '("--from=main" "--to=dev"))
+              (setq-local majutsu-buffer-diff-filesets '("foo" "bar")))
+            (with-temp-buffer
+              (cl-letf (((symbol-function 'majutsu-diff-setup-buffer)
+                         (lambda (_args range filesets &rest _)
+                           (setq called-range range
+                                 called-files filesets)))
+                        ((symbol-function 'majutsu-diff--dwim)
+                         (lambda () '(commit . "abc123"))))
+                (call-interactively #'majutsu-diff-dwim)
+                (should (equal called-range '("--revisions=abc123")))
+                (should (equal called-files nil)))))
+        (when (buffer-live-p diff-buf)
+          (kill-buffer diff-buf))))))
+
+(ert-deftest majutsu-diff-refine-hunk-default-disabled ()
+  "Diff refinement should be disabled by default."
+  (with-temp-buffer
+    (majutsu-diff-mode)
+    (should-not majutsu-diff-refine-hunk)))
+
+(ert-deftest majutsu-diff-toggle-refine-hunk-updates ()
+  "Toggling refinement should update local state and trigger refresh."
+  (with-temp-buffer
+    (majutsu-diff-mode)
+    (let ((calls 0))
+      (cl-letf (((symbol-function 'majutsu-diff--update-hunk-refinement)
+                 (lambda (&rest _)
+                   (setq calls (1+ calls)))))
+        (should-not majutsu-diff-refine-hunk)
+        (majutsu-diff-toggle-refine-hunk nil)
+        (should (eq majutsu-diff-refine-hunk t))
+        (should (= calls 1))
+        (majutsu-diff-toggle-refine-hunk t)
+        (should (eq majutsu-diff-refine-hunk 'all))
+        (should (= calls 2))
+        (majutsu-diff-toggle-refine-hunk t)
+        (should (eq majutsu-diff-refine-hunk t))
+        (should (= calls 3))
+        (majutsu-diff-toggle-refine-hunk nil)
+        (should-not majutsu-diff-refine-hunk)
+        (should (= calls 4))))))
+
+(ert-deftest majutsu-diff-color-words-goto-from-uses-removed-block ()
+  "For shared color-words lines, removed block should target old side."
+  (cl-letf (((symbol-function 'majutsu-color-words-side-at-point)
+             (lambda (&optional _pos) 'removed)))
+    (should (majutsu-diff--color-words-goto-from '(:from-line 10 :to-line 12)))))
+
+(ert-deftest majutsu-diff-color-words-goto-from-uses-added-block ()
+  "For shared color-words lines, added block should target new side."
+  (cl-letf (((symbol-function 'majutsu-color-words-side-at-point)
+             (lambda (&optional _pos) 'added)))
+    (should-not (majutsu-diff--color-words-goto-from '(:from-line 10 :to-line 12)))))
+
+(ert-deftest majutsu-diff-color-words-goto-from-falls-back-to-line-shape ()
+  "When side cannot be inferred, keep line-shape fallback behavior."
+  (cl-letf (((symbol-function 'majutsu-color-words-side-at-point)
+             (lambda (&optional _pos) nil)))
+    (should (majutsu-diff--color-words-goto-from '(:from-line 10)))
+    (should-not (majutsu-diff--color-words-goto-from '(:from-line 10 :to-line 12)))))
+
+(ert-deftest majutsu-diff-color-words-column-uses-side-aware-helper ()
+  "Color-words column helper should receive side selection."
+  (let ((info '(:content-column 4))
+        called)
+    (cl-letf (((symbol-function 'majutsu-color-words-column-at-point)
+               (lambda (goto-from &optional _pos _info)
+                 (setq called goto-from)
+                 17)))
+      (should (= (majutsu-diff--color-words-column info t) 17))
+      (should called)
+      (should (= (majutsu-diff--color-words-column info nil) 17))
+      (should-not called))))
 
 (provide 'majutsu-diff-test)
 

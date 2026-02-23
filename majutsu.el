@@ -6,8 +6,10 @@
 ;; Maintainer: 0WD0 <wd.1105848296@gmail.com>
 ;; Keywords: tools, vc
 ;; URL: https://github.com/0WD0/majutsu
-;; Version: 0.5.0
+;; Version: 0.6.0
 ;; Package-Requires: ((emacs "29.1") (transient "0.5.0") (magit "3.3.0"))
+
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
 
@@ -18,11 +20,6 @@
 ;;; Code:
 
 (require 'majutsu-core)
-(require 'majutsu-process)
-(require 'majutsu-log)
-(require 'majutsu-diff)
-(require 'majutsu-jjdescription)
-(require 'majutsu-selection)
 
 ;;; Aliases
 
@@ -43,21 +40,23 @@ Instead of invoking this alias for `majutsu-log' using
   ["Transient and dwim commands"
    [("k" "Abandon"           majutsu-abandon)
     ("b" "Bookmarks"         majutsu-bookmark)
+    ("t" "Tags"              majutsu-tag)
     ("c" "Describe"          majutsu-describe)
     ("C" "Commit"            majutsu-commit)
     ("d" "Diff"              majutsu-diff)
     ("D" "Diff (dwim)"       majutsu-diff-dwim)
     ("e" "Edit change"       majutsu-edit-changeset)
-    ("E" "DiffEdit (ediff)"  majutsu-diffedit-emacs)]
+    ("E" "Ediff"             majutsu-ediff)]
    [("G" "Git"               majutsu-git-transient)
     ("l" "Log options"       majutsu-log-transient)
-    ("M" "DiffEdit (smerge)" majutsu-diffedit-smerge)
     ("o" "New"               majutsu-new)
     ("O" "New (dwim)"        majutsu-new-dwim)
     ("r" "Rebase"            majutsu-rebase)
+    ("V" "Revert"            majutsu-revert)
     ("R" "Restore"           majutsu-restore)]
    [("s" "Squash"            majutsu-squash)
     ("S" "Split"             majutsu-split)
+    ("A" "Absorb"            majutsu-absorb)
     ("y" "Duplicate"         majutsu-duplicate)
     ("Y" "Duplicate (dwim)"  majutsu-duplicate-dwim)
     ("Z" "Workspaces"        majutsu-workspace)
@@ -66,7 +65,7 @@ Instead of invoking this alias for `majutsu-log' using
   ["Essential commands"
    :if-derived majutsu-mode
    [("g" "Refresh"           majutsu-refresh)
-    ("q" "Quit"              quit-window)]
+    ("q" "Quit"              majutsu-mode-bury-buffer)]
    [("?" "Help"              transient-help)
     ("$" "Process buffer"    majutsu-process-buffer)]
    [("C-x m"    "Show all key bindings"    describe-mode)]])
@@ -74,19 +73,31 @@ Instead of invoking this alias for `majutsu-log' using
 (provide 'majutsu)
 
 (cl-eval-when (load eval)
+  (require 'majutsu-template)
+  (require 'majutsu-jjdescription)
+  (require 'majutsu-log)
+  (require 'majutsu-diff)
+  (require 'majutsu-ediff)
   (require 'majutsu-bookmark)
+  (require 'majutsu-tag)
   (require 'majutsu-duplicate)
   (require 'majutsu-edit)
   (require 'majutsu-git)
   (require 'majutsu-interactive)
+  (require 'majutsu-file)
+  (require 'majutsu-annotate)
   (require 'majutsu-rebase)
+  (require 'majutsu-revert)
   (require 'majutsu-restore)
+  (require 'majutsu-absorb)
   (require 'majutsu-split)
   (require 'majutsu-squash)
+  (require 'majutsu-sparse)
   (require 'majutsu-commit)
   (require 'majutsu-new)
   (require 'majutsu-op)
-  (require 'majutsu-workspace))
+  (require 'majutsu-workspace)
+  (require 'majutsu-conflict))
 
 (with-eval-after-load 'evil
   (require 'majutsu-evil nil t))

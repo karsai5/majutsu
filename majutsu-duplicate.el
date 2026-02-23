@@ -1,4 +1,4 @@
-;;; majutsu-duplicate.el -*- lexical-binding: t; -*-
+;;; majutsu-duplicate.el --- Duplicate command for Majutsu  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025-2026 0WD0
 
@@ -6,6 +6,8 @@
 ;; Maintainer: 0WD0 <wd.1105848296@gmail.com>
 ;; Keywords: tools, vc
 ;; URL: https://github.com/0WD0/majutsu
+
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
 
@@ -18,7 +20,7 @@
 (require 'majutsu-selection)
 
 (defclass majutsu-duplicate-option (majutsu-selection-option)
-  ((selection-key :initarg :selection-key :initform nil)))
+  ())
 
 (defclass majutsu-duplicate--toggle-option (majutsu-selection-toggle-option)
   ())
@@ -53,10 +55,8 @@ With prefix ARG, open the duplicate transient."
 (transient-define-argument majutsu-duplicate:-r ()
   :description "Source"
   :class 'majutsu-duplicate-option
-  :selection-key 'source
   :selection-label "[SRC]"
   :selection-face '(:background "goldenrod" :foreground "black")
-  :selection-type 'multi
   :key "-r"
   :argument "-r"
   :multi-value 'repeat
@@ -65,10 +65,8 @@ With prefix ARG, open the duplicate transient."
 (transient-define-argument majutsu-duplicate:--onto ()
   :description "Onto"
   :class 'majutsu-duplicate-option
-  :selection-key 'onto
   :selection-label "[ONTO]"
   :selection-face '(:background "dark green" :foreground "white")
-  :selection-type 'multi
   :key "-o"
   :argument "--onto="
   :multi-value 'repeat
@@ -77,10 +75,8 @@ With prefix ARG, open the duplicate transient."
 (transient-define-argument majutsu-duplicate:--after ()
   :description "After"
   :class 'majutsu-duplicate-option
-  :selection-key 'after
   :selection-label "[AFTER]"
   :selection-face '(:background "dark blue" :foreground "white")
-  :selection-type 'multi
   :key "-A"
   :argument "--insert-after="
   :multi-value 'repeat
@@ -89,10 +85,8 @@ With prefix ARG, open the duplicate transient."
 (transient-define-argument majutsu-duplicate:--before ()
   :description "Before"
   :class 'majutsu-duplicate-option
-  :selection-key 'before
   :selection-label "[BEFORE]"
   :selection-face '(:background "dark magenta" :foreground "white")
-  :selection-type 'multi
   :key "-B"
   :argument "--insert-before="
   :multi-value 'repeat
@@ -101,8 +95,6 @@ With prefix ARG, open the duplicate transient."
 (transient-define-argument majutsu-duplicate:source ()
   :description "Source (toggle at point)"
   :class 'majutsu-duplicate--toggle-option
-  :selection-key 'source
-  :selection-type 'multi
   :key "r"
   :argument "-r"
   :multi-value 'repeat)
@@ -110,8 +102,6 @@ With prefix ARG, open the duplicate transient."
 (transient-define-argument majutsu-duplicate:onto ()
   :description "Onto (toggle at point)"
   :class 'majutsu-duplicate--toggle-option
-  :selection-key 'onto
-  :selection-type 'multi
   :key "o"
   :argument "--onto="
   :multi-value 'repeat)
@@ -119,8 +109,6 @@ With prefix ARG, open the duplicate transient."
 (transient-define-argument majutsu-duplicate:after ()
   :description "After (toggle at point)"
   :class 'majutsu-duplicate--toggle-option
-  :selection-key 'after
-  :selection-type 'multi
   :key "a"
   :argument "--insert-after="
   :multi-value 'repeat)
@@ -128,24 +116,9 @@ With prefix ARG, open the duplicate transient."
 (transient-define-argument majutsu-duplicate:before ()
   :description "Before (toggle at point)"
   :class 'majutsu-duplicate--toggle-option
-  :selection-key 'before
-  :selection-type 'multi
   :key "b"
   :argument "--insert-before="
   :multi-value 'repeat)
-
-(defun majutsu-duplicate-clear-selections ()
-  "Clear duplicate selections."
-  (interactive)
-  (when (consp transient--suffixes)
-    (dolist (obj transient--suffixes)
-      (when (and (cl-typep obj 'majutsu-duplicate-option)
-                 (memq (oref obj selection-key) '(source onto after before)))
-        (transient-infix-set obj nil))))
-  (when transient--prefix
-    (transient--redisplay))
-  (majutsu-selection-render)
-  (message "Cleared duplicate selections"))
 
 (transient-define-prefix majutsu-duplicate ()
   "Internal transient for jj duplicate."
@@ -156,7 +129,7 @@ With prefix ARG, open the duplicate transient."
    ["Sources"
     (majutsu-duplicate:-r)
     (majutsu-duplicate:source)
-    ("c" "Clear selections" majutsu-duplicate-clear-selections
+    ("c" "Clear selections" majutsu-selection-clear
      :transient t)]
    ["Placement"
     (majutsu-duplicate:--onto)

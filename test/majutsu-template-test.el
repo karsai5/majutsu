@@ -1,12 +1,13 @@
 ;;; majutsu-template-test.el --- Tests for majutsu-template DSL  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2025 0WD0
+;; Copyright (C) 2025-2026 0WD0
 
 ;; Author: 0WD0 <1105848296@qq.com>
 ;; Maintainer: 0WD0 <1105848296@qq.com>
-;; Version: 1.0.0
 ;; Keywords: tools, vc
 ;; URL: https://github.com/0WD0/majutsu
+
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
 
@@ -16,6 +17,8 @@
 
 (require 'ert)
 (require 'majutsu-template)
+
+(defvar mt--runtime-tmp nil)
 
 (defmacro mt--is (form expected)
   `(let ((got ,form))
@@ -261,6 +264,12 @@
                  "concat(\"yes\", \"!\")"))
   (mt--is (majutsu-tpl [:call '+ 3 4]) "(3 + 4)")
   (mt--is (majutsu-tpl [:call '+ [:str "A"] [:str "B"]]) "(\"A\" + \"B\")"))
+
+(ert-deftest test-majutsu-template-runtime-var-eval ()
+  (let* ((mt--runtime-tmp 1)
+         (s [:concat (if (> 2 mt--runtime-tmp) [:str "T"] [:str "F"]) [:str "!"]])
+         (mt--runtime-tmp 3))
+    (mt--is (majutsu-tpl s) "concat(\"F\", \"!\")")))
 
 (ert-deftest test-majutsu-template-raw-type-annotation ()
   (let ((node (majutsu-template-ast '[:raw "foo" :Template])))

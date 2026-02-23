@@ -9,6 +9,12 @@
 ;; Keywords: tools, vc
 ;; URL: https://github.com/0WD0/majutsu
 
+;; SPDX-License-Identifier: GPL-3.0-or-later
+
+;; Portions of process buffer orchestration are adapted from:
+;; - Magit `lisp/magit-process.el` (commit c800f79c2061621fde847f6a53129eca0e8da728)
+;;   Copyright (C) 2008-2026 The Magit Project Contributors
+
 ;;; Commentary:
 
 ;; This library runs jj commands synchronously and asynchronously,
@@ -16,13 +22,16 @@
 
 ;;; Code:
 
-(require 'magit) ; for magit-with-editor
 (require 'majutsu-base)
 (require 'majutsu-mode)
 (require 'majutsu-jj)
 (require 'ansi-color)
 (require 'subr-x)
 (require 'with-editor)
+
+(require 'magit-git) ; for magit-with-editor
+(require 'magit-section)
+(require 'magit-process) ; for prompt functions
 
 ;;; Customization
 
@@ -70,14 +79,6 @@ the heading of each process section."
   :type '(choice (const :tag "None" nil) string)
   :group 'majutsu-process)
 
-;;; Internal helpers
-
-(defun majutsu--process--apply-colors (output)
-  "Apply ANSI color filtering to OUTPUT when enabled."
-  (if (and output majutsu-process-apply-ansi-colors)
-      (ansi-color-apply output)
-    output))
-
 ;;; Process buffer
 
 (defclass majutsu-process-section (magit-section)
@@ -103,9 +104,9 @@ If that buffer doesn't exist yet, then create it.  Non-interactively
 return the buffer and unless optional NODISPLAY is non-nil also display
 it."
   (interactive)
-  (let* ((root (if (derived-mode-p 'majutsu-mode)
-                   default-directory
-                 (majutsu--toplevel-safe)))
+  (let* ((root (or (majutsu--buffer-root)
+                   (majutsu-toplevel default-directory)
+                   (majutsu--toplevel-safe default-directory)))
          (name (format "*majutsu-process: %s*"
                        (abbreviate-file-name (directory-file-name root))))
          (buffer (or (majutsu--find-mode-buffer 'majutsu-process-mode root)
@@ -124,7 +125,7 @@ it."
           (magit-insert-section (processbuf)
             (insert "\n")))))
     (unless nodisplay
-      (majutsu-display-buffer buffer 'process))
+      (majutsu-display-buffer buffer))
     buffer))
 
 (defun majutsu-process-kill ()
@@ -328,7 +329,7 @@ ARG may be a process object or an exit code.  Return the exit code."
        ((= majutsu-process-popup-time 0)
         (if (minibufferp)
             (switch-to-buffer-other-window buf)
-          (majutsu-display-buffer buf 'process)))
+          (pop-to-buffer buf)))
        ((> majutsu-process-popup-time 0)
         (run-with-timer majutsu-process-popup-time nil
                         (lambda (p)
@@ -337,7 +338,7 @@ ARG may be a process object or an exit code.  Return the exit code."
                                       (_(buffer-live-p b)))
                             (if (minibufferp)
                                 (switch-to-buffer-other-window b)
-                              (majutsu-display-buffer b 'process))))
+                              (pop-to-buffer b))))
                         process))))))
 
 (defun majutsu-start-process (program &optional input &rest args)
@@ -389,6 +390,11 @@ repository's log buffer (see `majutsu-refresh')."
         (delete-region (line-beginning-position) (point)))
       (insert (propertize string 'magit-section
                           (process-get proc 'section)))
+      (magit-process-yes-or-no-prompt proc string)
+      (magit-process-username-prompt proc string)
+      (magit-process-password-prompt proc string)
+      (run-hook-with-args-until-success 'magit-process-prompt-functions
+                                        proc string)
       (set-marker (process-mark proc) (point)))))
 
 (defun majutsu--process-sentinel (process _event)
@@ -416,6 +422,7 @@ SUCCESS-MSG is displayed on exit code 0.  When FINISH-CALLBACK is
 non-nil, call it as (FINISH-CALLBACK PROCESS EXIT-CODE) after the
 process terminates."
   (let* ((args (majutsu-process-jj-arguments args))
+         (default-directory (majutsu--toplevel-safe default-directory))
          (process (apply #'majutsu-start-process majutsu-jj-executable nil args)))
     (when success-msg
       (process-put process 'success-msg success-msg))
@@ -432,17 +439,18 @@ Process output goes into a new section in the buffer returned by
 Unlike `majutsu-start-jj', this does not implicitly refresh any Majutsu
 buffers.  Call `majutsu-refresh' explicitly when desired."
   (let* ((args (majutsu-process-jj-arguments args))
+         (default-directory (majutsu--toplevel-safe default-directory))
          (pwd default-directory)
          (process-buf (let ((default-directory pwd))
                         (majutsu-process-buffer t)))
-         (root (with-current-buffer process-buf default-directory)))
+         (process-root (with-current-buffer process-buf default-directory)))
     (pcase-let* ((section
                   (with-current-buffer process-buf
                     (prog1 (majutsu--process-insert-section pwd majutsu-jj-executable args nil nil)
                       (backward-char 1))))
                  (inhibit-read-only t)
                  (exit (apply #'process-file majutsu-jj-executable nil process-buf nil args)))
-      (setq exit (majutsu-process-finish exit process-buf (current-buffer) root section))
+      (setq exit (majutsu-process-finish exit process-buf (current-buffer) process-root section))
       exit)))
 
 (defun majutsu-run-jj-async (&rest args)
@@ -463,31 +471,9 @@ Process output goes into a new section in the buffer returned by
     (majutsu-refresh)
     exit))
 
-(defun majutsu-jj-string (&rest args)
-  "Run jj command with ARGS and return its output as a string."
-  (let* ((start-time (current-time))
-         (safe-args (majutsu-process-jj-arguments args))
-         result exit-code)
-    (majutsu--debug "Running command: %s %s" majutsu-jj-executable (string-join safe-args " "))
-    (with-temp-buffer
-      (let ((coding-system-for-read 'utf-8-unix)
-            (coding-system-for-write 'utf-8-unix))
-        (setq exit-code (apply #'process-file majutsu-jj-executable nil t nil safe-args)))
-      (setq result (majutsu--process--apply-colors (buffer-string)))
-      (majutsu--debug "Command completed in %.3f seconds, exit code: %d"
-                      (float-time (time-subtract (current-time) start-time))
-                      exit-code)
-      (when (and majutsu-show-command-output (not (string-empty-p result)))
-        (majutsu--debug "Command output: %s" (string-trim result)))
-      result)))
-
 (defun majutsu-run-jj-with-editor (&rest args)
   "Run JJ ARGS using with-editor."
-  (let* ((origin-window (selected-window))
-         (origin-buffer (current-buffer))
-         (visit-hook (majutsu--with-editor--visit-hook origin-window origin-buffer)))
-    (majutsu--with-editor--queue-visit visit-hook)
-    (majutsu-with-editor (apply #'majutsu-run-jj-async args))))
+  (majutsu-with-editor (apply #'majutsu-run-jj-async args)))
 
 ;;; _
 (provide 'majutsu-process)

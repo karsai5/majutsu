@@ -9,6 +9,8 @@
 ;; Keywords: tools, vc
 ;; URL: https://github.com/0WD0/majutsu
 
+;; SPDX-License-Identifier: GPL-3.0-or-later
+
 ;;; Commentary:
 
 ;; This library builds the Majutsu log buffer: compiles jj templates,
@@ -16,12 +18,7 @@
 
 ;;; Code:
 
-(require 'majutsu-core)
-(require 'majutsu-mode)
-(require 'majutsu-process)
-(require 'majutsu-template)
-(require 'majutsu-selection)
-(require 'majutsu-section)
+(require 'majutsu)
 (require 'json)
 
 (defcustom majutsu-log-field-faces
@@ -53,13 +50,6 @@ When a field is not present in this alist, it defaults to t."
 (defvar-keymap majutsu-commit-section-map
   :doc "Keymap for `jj-commit' sections."
   "<remap> <majutsu-visit-thing>" #'majutsu-edit-changeset)
-
-;;; Utilities
-
-(defun majutsu-read-revset (prompt &optional default)
-  "Prompt user with PROMPT to read a revision set string."
-  (let ((default (or default (magit-section-value-if 'jj-commit) "@")))
-    (majutsu-read-string prompt nil nil default)))
 
 ;;; Log State
 
@@ -262,6 +252,20 @@ Also registers a variable watcher to invalidate the template cache."
        (when (fboundp 'add-variable-watcher)
          (add-variable-watcher ',var-name #'majutsu-log--invalidate-template-cache)))))
 
+(majutsu-template-defun short-change-id ()
+  (:returns Template :flavor :custom :doc "Shortest unique change id.")
+  [:change_id :shortest 8])
+
+(majutsu-template-defun git_head ()
+  (:returns Template :flavor :custom :doc "Deprecated alias for .contained_in('first_parent(@)')")
+  [:method 'self :contained_in "first_parent(@)"])
+
+(majutsu-template-defun short-change-id-with-offset ()
+  (:returns Template :flavor :custom :doc "Shortest unique change id with offset.")
+  [[:short-change-id]
+   [:label "change_offset" "/"]
+   [:change_offset]])
+
 (majutsu-log-define-column id
   [:if [:or [:hidden] [:divergent]]
       [:commit_id :shortest 8]
@@ -269,14 +273,17 @@ Also registers a variable watcher to invalidate the template cache."
   "Template for the commit-id column.")
 
 (majutsu-log-define-column change-id
-  [:if [:hidden]
-      [:label "hidden"
-              [[:change_id :shortest 8]
-               " hidden"]]
-    [:label
-     [:if [:divergent] "divergent"]
-     [[:change_id :shortest 8]
-      [:if [:divergent] "??"]]]]
+  [:label
+   [:separate " "
+              [:if [:current_working_copy] "working_copy"]
+              [:if [:immutable] "immutable" "mutable"]
+              [:if [:conflict] "conflicted"]]
+   [:coalesce
+    [:if [:hidden]
+        [:label "hidden" [:short-change-id-with-offset]]]
+    [:if [:divergent]
+        [:label "divergent" [:short-change-id-with-offset]]]
+    [:short-change-id]]]
   "Template for the change-id column.")
 
 (majutsu-log-define-column commit-id
@@ -738,7 +745,7 @@ Assumes point is at the beginning of a commit line (a line containing
     (setq suffix-lines (nreverse suffix-lines))
     (delete-region bol delete-end)
     (goto-char bol)
-    (let* ((id (majutsu--normalize-id-value (plist-get entry :id)))
+    (let* ((id (substring-no-properties (plist-get entry :id)))
            (line-info (majutsu-log--format-entry-line entry compiled widths))
            (heading (plist-get line-info :line))
            (margin (plist-get line-info :margin))
@@ -796,23 +803,26 @@ This function is meant to be used as a WASHER for `majutsu-jj-wash'."
 
 ;;; Log insert status
 
+(defun majutsu-log--wash-status (_args)
+  "Keep `jj status` output as-is in the current section."
+  (goto-char (point-max)))
+
+;; TODO: Enhance status output parsing to create sections per file and conflicts.
 (defun majutsu-log-insert-status ()
   "Insert jj status into current buffer."
-  (let ((status-output (majutsu-jj-string "status")))
-    (when (and status-output (not (string-empty-p status-output)))
-      (magit-insert-section (status)
-        (magit-insert-heading "Working Copy Status")
-        (insert status-output)))))
+  (magit-insert-section (status)
+    (magit-insert-heading "Working Copy Status")
+    (majutsu-jj-wash #'majutsu-log--wash-status nil "status")))
 
 ;;; Log insert conflicts
 
 (defun majutsu-log-insert-conflicts ()
   "Insert conflicted files section."
-  (let ((output (majutsu-jj-string "resolve" "--list")))
-    (when (and output (not (string-empty-p output)))
+  (let ((lines (majutsu-jj-lines "resolve" "--list")))
+    (when lines
       (magit-insert-section (conflict)
         (magit-insert-heading "Unresolved Conflicts")
-        (dolist (line (split-string output "\n" t))
+        (dolist (line lines)
           (let ((file (string-trim line)))
             (magit-insert-section (jj-file file)
               (magit-insert-heading (propertize file 'face 'error))
@@ -860,7 +870,7 @@ This function is meant to be used as a WASHER for `majutsu-jj-wash'."
 Return non-nil when the section could be located."
   (when-let* ((id (and id (string-trim id)))
               (_(not (string-empty-p id)))
-              (section (majutsu-section-find id 'jj-commit)))
+              (section (majutsu-selection-find-section id 'jj-commit)))
     (magit-section-goto section)
     (goto-char (oref section start))
     t))
@@ -1037,26 +1047,6 @@ offer to create one using `jj git init`."
     (majutsu-log--set-value 'majutsu-log-mode args nil filesets))
   (majutsu-log-transient--redisplay))
 
-(defun majutsu-log-transient-add-path ()
-  "Add a fileset/path filter to the log view."
-  (interactive)
-  (let* ((input (string-trim (read-from-minibuffer "Add path/pattern: ")))
-         (paths (caddr (majutsu-log--get-value 'majutsu-log-mode 'direct))))
-    (when (and (not (string-empty-p input))
-               (not (member input paths)))
-      (pcase-let ((`(,args ,revsets ,_filesets)
-                   (majutsu-log--get-value 'majutsu-log-mode 'direct)))
-        (majutsu-log--set-value 'majutsu-log-mode args revsets (append paths (list input))))
-      (majutsu-log-transient--redisplay))))
-
-(defun majutsu-log-transient-clear-paths ()
-  "Clear all path filters."
-  (interactive)
-  (pcase-let ((`(,args ,revsets ,_filesets)
-               (majutsu-log--get-value 'majutsu-log-mode 'direct)))
-    (majutsu-log--set-value 'majutsu-log-mode args revsets nil))
-  (majutsu-log-transient--redisplay))
-
 (defun majutsu-log-transient-reset ()
   "Reset log options to defaults."
   (interactive)
@@ -1077,14 +1067,6 @@ offer to create one using `jj git init`."
       (format "%s (%s)" label value)
     label))
 
-(defun majutsu-log--paths-desc ()
-  "Return description for path filters."
-  (let ((paths (caddr (majutsu-log--get-value 'majutsu-log-mode 'direct))))
-    (cond
-     ((null paths) "Add path filter")
-     ((= (length paths) 1) (format "Add path filter (%s)" (car paths)))
-     (t (format "Add path filter (%d paths)" (length paths))))))
-
 (defun majutsu-log-transient--redisplay ()
   "Redisplay the log transient, compatible with older transient versions."
   (if (fboundp 'transient-redisplay)
@@ -1101,28 +1083,34 @@ offer to create one using `jj git init`."
 
 ;;;; Prefix Methods
 
+(cl-defmethod transient-prefix-value ((obj majutsu-log-prefix))
+  "Return (args files) from transient value."
+  (let ((args (cl-call-next-method obj)))
+    (list (seq-filter #'atom args)
+          (cdr (assoc "--" args)))))
+
 (cl-defmethod transient-init-value ((obj majutsu-log-prefix))
-  (pcase-let ((`(,args ,_revsets ,_filesets)
+  (pcase-let ((`(,args ,_revsets ,filesets)
                (majutsu-log--get-value (oref obj major-mode) 'prefix)))
-    (oset obj value args)))
+    (oset obj value (if filesets `(("--" ,@filesets) ,@args) args))))
 
 (cl-defmethod transient-set-value ((obj majutsu-log-prefix))
   (let* ((obj (oref obj prototype))
-         (mode (or (oref obj major-mode) major-mode))
-         (args (transient-args (oref obj command))))
-    (pcase-let ((`(,_old-args ,revsets ,filesets)
+         (mode (or (oref obj major-mode) major-mode)))
+    (pcase-let ((`(,args ,files) (transient-args (oref obj command)))
+                (`(,_old-args ,revsets ,_filesets)
                  (majutsu-log--get-value mode 'direct)))
-      (majutsu-log--set-value mode args revsets filesets)
+      (majutsu-log--set-value mode args revsets files)
       (transient--history-push obj)
       (majutsu-refresh))))
 
 (cl-defmethod transient-save-value ((obj majutsu-log-prefix))
   (let* ((obj (oref obj prototype))
-         (mode (or (oref obj major-mode) major-mode))
-         (args (transient-args (oref obj command))))
-    (pcase-let ((`(,_old-args ,revsets ,filesets)
+         (mode (or (oref obj major-mode) major-mode)))
+    (pcase-let ((`(,args ,files) (transient-args (oref obj command)))
+                (`(,_old-args ,revsets ,_filesets)
                  (majutsu-log--get-value mode 'direct)))
-      (majutsu-log--set-value mode args revsets filesets t)
+      (majutsu-log--set-value mode args revsets files t)
       (transient--history-push obj)
       (majutsu-refresh))))
 
@@ -1144,6 +1132,15 @@ offer to create one using `jj git init`."
   :class 'transient-switch
   :key "-G"
   :argument "--no-graph")
+
+(transient-define-argument majutsu-log:-- ()
+  :description "Limit to filesets"
+  :class 'transient-files
+  :key "--"
+  :argument "--"
+  :prompt "Limit to filesets"
+  :reader #'majutsu-read-files
+  :multi-value t)
 
 ;;;###autoload
 (transient-define-prefix majutsu-log-transient ()
@@ -1168,12 +1165,7 @@ offer to create one using `jj git init`."
      :transient t)
     ]
    ["Paths"
-    ("a" "Add path filter" majutsu-log-transient-add-path
-     :description majutsu-log--paths-desc
-     :transient t)
-    ("A" "Clear path filters" majutsu-log-transient-clear-paths
-     :if (lambda () (caddr (majutsu-log--get-value 'majutsu-log-mode 'direct)))
-     :transient t)]
+    (majutsu-log:--)]
    ["Actions"
     ("g" "buffer" majutsu-log-transient)
     ("s" "buffer and set defaults" transient-set-and-exit)
@@ -1187,7 +1179,9 @@ offer to create one using `jj git init`."
    (t
     (unless (derived-mode-p 'majutsu-log-mode)
       (user-error "Not in a Majutsu log buffer"))
-    (setq-local majutsu-buffer-log-args (transient-args transient-current-command))
+    (pcase-let ((`(,args ,filesets) (transient-args transient-current-command)))
+      (setq-local majutsu-buffer-log-args args)
+      (setq-local majutsu-buffer-log-filesets filesets))
     (majutsu-refresh-buffer))))
 
 ;;; _

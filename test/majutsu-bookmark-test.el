@@ -1,4 +1,12 @@
-;;; majutsu-bookmark-test.el -*- lexical-binding: t; -*-
+;;; majutsu-bookmark-test.el --- Tests for bookmark helpers  -*- lexical-binding: t; -*-
+
+;; SPDX-License-Identifier: GPL-3.0-or-later
+
+;;; Commentary:
+
+;; Tests for bookmark parsing and transient argument behavior.
+
+;;; Code:
 
 (require 'ert)
 (require 'cl-lib)
@@ -19,10 +27,10 @@
 
 (ert-deftest majutsu-bookmark-get-bookmark-names/local-args ()
   (let (seen-args)
-    (cl-letf (((symbol-function 'majutsu-jj-string)
+    (cl-letf (((symbol-function 'majutsu-jj-lines)
                (lambda (&rest args)
-                 (setq seen-args args)
-                 "main\nfeature\n")))
+                 (setq seen-args (flatten-list args))
+                 '("main" "feature"))))
       (should (equal (majutsu--get-bookmark-names 'local) '("main" "feature")))
       (should (equal (seq-take seen-args 3) '("bookmark" "list" "--quiet")))
       (should-not (member "--all-remotes" seen-args))
@@ -35,10 +43,10 @@
 
 (ert-deftest majutsu-bookmark-get-bookmark-names/remote-args ()
   (let (seen-args)
-    (cl-letf (((symbol-function 'majutsu-jj-string)
+    (cl-letf (((symbol-function 'majutsu-jj-lines)
                (lambda (&rest args)
-                 (setq seen-args args)
-                 "main@origin\ndev@upstream\n")))
+                 (setq seen-args (flatten-list args))
+                 '("main@origin" "dev@upstream"))))
       (should (equal (majutsu--get-bookmark-names 'remote) '("main@origin" "dev@upstream")))
       (should (member "--all-remotes" seen-args))
       (should (member "-T" seen-args))
@@ -48,10 +56,10 @@
 
 (ert-deftest majutsu-bookmark-get-bookmark-names/remote-tracked-args ()
   (let (seen-args)
-    (cl-letf (((symbol-function 'majutsu-jj-string)
+    (cl-letf (((symbol-function 'majutsu-jj-lines)
                (lambda (&rest args)
-                 (setq seen-args args)
-                 "main@origin\n")))
+                 (setq seen-args (flatten-list args))
+                 '("main@origin"))))
       (should (equal (majutsu--get-bookmark-names 'remote-tracked) '("main@origin")))
       (should (member "--tracked" seen-args))
       (let ((template (cadr (member "-T" seen-args))))
@@ -59,10 +67,10 @@
 
 (ert-deftest majutsu-bookmark-get-bookmark-names/remote-untracked-args ()
   (let (seen-args)
-    (cl-letf (((symbol-function 'majutsu-jj-string)
+    (cl-letf (((symbol-function 'majutsu-jj-lines)
                (lambda (&rest args)
-                 (setq seen-args args)
-                 "topic@origin\n")))
+                 (setq seen-args (flatten-list args))
+                 '("topic@origin"))))
       (should (equal (majutsu--get-bookmark-names 'remote-untracked) '("topic@origin")))
       (should (member "--all-remotes" seen-args))
       (let ((template (cadr (member "-T" seen-args))))

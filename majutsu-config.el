@@ -1,8 +1,13 @@
-;;; majutsu-config.el --- Config management for Majutsu -*- lexical-binding: t; -*-
+;;; majutsu-config.el --- Config management for Majutsu  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025-2026 0WD0
 
 ;; Author: 0WD0 <wd.1105848296@gmail.com>
+;; Maintainer: 0WD0 <wd.1105848296@gmail.com>
+;; Keywords: tools, vc
+;; URL: https://github.com/0WD0/majutsu
+
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
 
@@ -14,9 +19,9 @@
 
 (defun majutsu-get (key)
   "Get config value for KEY from jj."
-  (let ((output (majutsu-jj-string "config" "get" key)))
-    (unless (string-empty-p output)
-      (string-trim output))))
+  (let ((lines (majutsu-jj-lines "config" "get" key)))
+    (when lines
+      (string-trim (car lines)))))
 
 (defun majutsu-set (key value &optional scope)
   "Set config KEY to VALUE in SCOPE (user/repo/workspace).
@@ -27,7 +32,7 @@ SCOPE defaults to user."
                       ('workspace "--workspace")
                       (_ "--user"))
                     key value)))
-    (apply #'majutsu-run-jj args)))
+    (majutsu-run-jj args)))
 
 (defun majutsu-list (&optional prefix scope)
   "List config variables matching PREFIX in SCOPE.
@@ -39,13 +44,13 @@ Returns alist of (name . value) pairs."
                                  ('workspace "--workspace")
                                  ('user "--user"))))
                        (when prefix (list prefix))))
-         (output (apply #'majutsu-jj-string args)))
-    (when output
+         (lines (majutsu-jj-lines args)))
+    (when lines
       (mapcar (lambda (line)
                 (when (string-match "^\\([^=]+\\)=\"?\\(.*?\\)\"?$" line)
                   (cons (match-string 1 line)
                         (match-string 2 line))))
-              (split-string output "\n" t)))))
+              lines))))
 
 (provide 'majutsu-config)
 ;;; majutsu-config.el ends here

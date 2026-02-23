@@ -1,12 +1,13 @@
 ;;; majutsu-utils-test.el --- Tests for majutsu utility functions  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2025 0WD0
+;; Copyright (C) 2025-2026 0WD0
 
 ;; Author: 0WD0 <1105848296@qq.com>
 ;; Maintainer: 0WD0 <1105848296@qq.com>
-;; Version: 1.0.0
 ;; Keywords: tools, vc
 ;; URL: https://github.com/0WD0/majutsu
+
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
 
@@ -16,17 +17,6 @@
 
 (require 'ert)
 (require 'majutsu)
-
-(ert-deftest majutsu-utils-normalize-id-value ()
-  "Test ID normalization for various input types."
-  (should (equal (majutsu--normalize-id-value "abc") "abc"))
-  (should (equal (majutsu--normalize-id-value 'abc) "abc"))
-  (should (equal (majutsu--normalize-id-value 123) "123"))
-  (should (equal (majutsu--normalize-id-value nil) nil))
-  (let ((s "prop"))
-    (put-text-property 0 1 'face 'bold s)
-    (should (equal (majutsu--normalize-id-value s) "prop"))
-    (should-not (text-properties-at 0 (majutsu--normalize-id-value s)))))
 
 (ert-deftest majutsu-utils-diff-file-status ()
   "Test file status inference from diff lines."

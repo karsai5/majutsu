@@ -1,4 +1,4 @@
-;;; majutsu-core.el --- Core aggregation for Majutsu -*- lexical-binding: t; -*-
+;;; majutsu-core.el --- Core aggregation for Majutsu  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025-2026 0WD0
 
@@ -6,6 +6,8 @@
 ;; Maintainer: 0WD0 <wd.1105848296@gmail.com>
 ;; Keywords: tools, vc
 ;; URL: https://github.com/0WD0/majutsu
+
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
 

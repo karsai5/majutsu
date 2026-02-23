@@ -1,4 +1,4 @@
-;;; majutsu-template.el -*- lexical-binding: t; -*-
+;;; majutsu-template.el --- Embedded DSL for jj template  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025-2026 0WD0
 
@@ -6,6 +6,8 @@
 ;; Maintainer: 0WD0 <wd.1105848296@gmail.com>
 ;; Keywords: tools, vc
 ;; URL: https://github.com/0WD0/majutsu
+
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
 
@@ -762,6 +764,9 @@ participate in keyword sugar."
     (CryptographicSignature
      :doc "Cryptographic signature metadata."
      :converts ((Boolean . no) (Serialize . no) (Template . no)))
+    (DiffStatEntry
+     :doc "Per-file diff stat entry."
+     :converts ((Boolean . no) (Serialize . no) (Template . no)))
     (DiffStats
      :doc "Diff statistics histogram."
      :converts ((Boolean . no) (Serialize . no) (Template . yes)))
@@ -871,20 +876,24 @@ participate in keyword sugar."
      (local_bookmarks :returns List :keyword t)
      (remote_bookmarks :returns List :keyword t)
      (tags :returns List :keyword t)
-     (git_refs :returns List :keyword t)
-     (git_head :returns Boolean :keyword t)
+     (local_tags :returns List :keyword t)
+     (remote_tags :returns List :keyword t)
      (divergent :returns Boolean :keyword t)
      (hidden :returns Boolean :keyword t)
+     (change_offset :returns Integer :keyword t)
      (immutable :returns Boolean :keyword t)
      (contained_in :args ((revset String)) :returns Boolean)
      (conflict :returns Boolean :keyword t)
      (empty :returns Boolean :keyword t)
      (diff :args ((files String :optional t)) :returns TreeDiff)
      (files :args ((files String :optional t)) :returns List)
+     (conflicted_files :returns List :keyword t)
      (root :returns Boolean :keyword t))
     (CommitEvolutionEntry
      (commit :returns Commit :keyword t)
-     (operation :returns Operation :keyword t))
+     (operation :returns Operation :keyword t)
+     (predecessors :returns List :keyword t)
+     (inter_diff :args ((files String :optional t)) :returns TreeDiff))
     (ChangeId
      (normal_hex :returns String :keyword t)
      (short :args ((len Integer :optional t)) :returns String)
@@ -903,7 +912,8 @@ participate in keyword sugar."
      (tracked :returns Boolean :keyword t)
      (tracking_present :returns Boolean :keyword t)
      (tracking_ahead_count :returns SizeHint :keyword t)
-     (tracking_behind_count :returns SizeHint :keyword t))
+     (tracking_behind_count :returns SizeHint :keyword t)
+     (synced :returns Boolean :keyword t))
     (ConfigValue
      (as_boolean :returns Boolean :keyword t)
      (as_integer :returns Integer :keyword t)
@@ -913,7 +923,16 @@ participate in keyword sugar."
      (status :returns String :keyword t)
      (key :returns String :keyword t)
      (display :returns String :keyword t))
+    (DiffStatEntry
+     (bytes_delta :returns Integer :keyword t)
+     (lines_added :returns Integer :keyword t)
+     (lines_removed :returns Integer :keyword t)
+     (path :returns RepoPath :keyword t)
+     (display_diff_path :returns String :keyword t)
+     (status :returns String :keyword t)
+     (status_char :returns String :keyword t))
     (DiffStats
+     (files :returns List :keyword t)
      (total_added :returns Integer :keyword t)
      (total_removed :returns Integer :keyword t))
     (Email
@@ -925,7 +944,13 @@ participate in keyword sugar."
      (filter :args ((predicate Lambda)) :returns List)
      (map :args ((mapper Lambda)) :returns ListTemplate)
      (any :args ((predicate Lambda)) :returns Boolean)
-     (all :args ((predicate Lambda)) :returns Boolean))
+     (all :args ((predicate Lambda)) :returns Boolean)
+     (first :returns T :keyword t)
+     (last :returns T :keyword t)
+     (get :args ((index Integer)) :returns T)
+     (reverse :returns List :keyword t)
+     (skip :args ((count Integer)) :returns List)
+     (take :args ((count Integer)) :returns List))
     (List-Trailer
      (contains_key :args ((key Stringify)) :returns Boolean))
     (ListTemplate
@@ -979,6 +1004,9 @@ participate in keyword sugar."
      (trim :returns String :keyword t)
      (trim_start :returns String :keyword t)
      (trim_end :returns String :keyword t)
+     (split :args ((separator StringPattern)
+                   (limit Integer :optional t))
+            :returns List)
      (substr :args ((start Integer) (end Integer)) :returns String)
      (escape_json :returns String :keyword t))
     (Timestamp
@@ -986,7 +1014,8 @@ participate in keyword sugar."
      (format :args ((format String)) :returns String)
      (utc :returns Timestamp :keyword t)
      (local :returns Timestamp :keyword t)
-     (after :args ((date String)) :returns Boolean))
+     (after :args ((date String)) :returns Boolean)
+     (before :args ((date String)) :returns Boolean))
     (TimestampRange
      (start :returns Timestamp :keyword t)
      (end :returns Timestamp :keyword t)
@@ -1002,12 +1031,15 @@ participate in keyword sugar."
      (summary :returns Template :keyword t))
     (TreeDiffEntry
      (path :returns RepoPath :keyword t)
+     (display_diff_path :returns String :keyword t)
      (status :returns String :keyword t)
+     (status_char :returns String :keyword t)
      (source :returns TreeEntry :keyword t)
      (target :returns TreeEntry :keyword t))
     (TreeEntry
      (path :returns RepoPath :keyword t)
      (conflict :returns Boolean :keyword t)
+     (conflict_side_count :returns Integer :keyword t)
      (file_type :returns String :keyword t)
      (executable :returns Boolean :keyword t))
     (WorkspaceRef
@@ -1238,6 +1270,8 @@ NODES are the remaining argument nodes. Returns list of (NAME . ARGS)."
 (majutsu-template--defpassthrough stringify "stringify helper.")
 (majutsu-template--defpassthrough raw_escape_sequence "raw_escape_sequence helper.")
 (majutsu-template--defpassthrough config "config helper.")
+(majutsu-template--defpassthrough hyperlink "hyperlink helper.")
+(majutsu-template--defpassthrough git_web_url "git_web_url helper.")
 ;; Internal node representation: (:tag ...)
 
 (defun majutsu-template--str-escape (s)
@@ -1491,8 +1525,8 @@ dynamic bindings of `majutsu-template-default-self-type'."
     `(let ((majutsu-template--allow-eval t))
        (majutsu-template-compile ,form ,self-type)))
    (t
-    `(let ((majutsu-template--allow-eval nil))
-       (majutsu-template-compile (majutsu-template--normalize ,form) ,self-type)))))
+    `(let ((majutsu-template--allow-eval t))
+       (majutsu-template-compile ,form ,self-type)))))
 
 ;;; _
 (provide 'majutsu-template)

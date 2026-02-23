@@ -1,4 +1,4 @@
-;;; majutsu-git.el -*- lexical-binding: t; -*-
+;;; majutsu-git.el --- Git integration commands for Majutsu  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025-2026 0WD0
 
@@ -6,6 +6,8 @@
 ;; Maintainer: 0WD0 <wd.1105848296@gmail.com>
 ;; Keywords: tools, vc
 ;; URL: https://github.com/0WD0/majutsu
+
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
 
@@ -15,22 +17,11 @@
 ;;; Code:
 
 (require 'majutsu)
+
 (require 'seq)
 (require 'subr-x)
 
-(declare-function majutsu-jj-string "majutsu-process" (&rest args))
-(declare-function majutsu--toplevel-safe "majutsu-jj" (&optional directory))
-(declare-function majutsu-with-toplevel "majutsu-jj" (&rest body))
-
 ;;; majutsu-git
-
-(defun majutsu-git--call (&rest args)
-  "Call `jj git ARGS' synchronously, for side-effects."
-  (apply #'majutsu-call-jj (append '("git") args)))
-
-(defun majutsu-git--run (&rest args)
-  "Call `jj git ARGS' synchronously, and refresh."
-  (apply #'majutsu-run-jj (append '("git") args)))
 
 (defun majutsu-git--start (args &optional success-msg finish-callback)
   "Start `jj git ARGS' asynchronously, for side-effects."
@@ -42,13 +33,12 @@
 This calls `jj git remote list` and parses the first word of each line."
   (let ((default-directory (or directory default-directory)))
     (condition-case _
-        (let* ((out (majutsu-jj-string "git" "remote" "list"))
-               (lines (split-string (or out "") "\n" t)))
-          (delete-dups
-           (delq nil
-                 (mapcar (lambda (line)
-                           (car (split-string line "[ :\t]+" t)))
-                         lines))))
+        (let* ((lines (or (majutsu-jj-lines "git" "remote" "list") '()))
+               (names (delq nil
+                            (mapcar (lambda (line)
+                                      (car (split-string line "[ :\t]+" t)))
+                                    lines))))
+          (delete-dups names))
       (error nil))))
 
 (defun majutsu-git--read-remote (prompt)
@@ -78,17 +68,55 @@ This calls `jj git remote list` and parses the first word of each line."
   (majutsu-git--start (append '("fetch") args) "Fetched from remote"))
 
 (defun majutsu-git-remote-list ()
-  "List Git remotes in a temporary buffer."
+  "List Git remotes in a dedicated buffer."
   (interactive)
-  (let* ((output (majutsu-jj-string "git" "remote" "list"))
-         (buf (get-buffer-create "*Majutsu Git Remotes*")))
-    (with-current-buffer buf
-      (setq buffer-read-only nil)
-      (erase-buffer)
-      (insert output)
-      (goto-char (point-min))
-      (view-mode 1))
-    (majutsu-display-buffer buf 'log)))
+  (majutsu-setup-buffer #'majutsu-git-remote-list-mode nil
+    :buffer "*Majutsu Git Remotes*"))
+
+(defun majutsu-git--remote-line-name (line)
+  "Return the remote name parsed from LINE."
+  (let* ((raw (string-trim (substring-no-properties line)))
+         (token (car (split-string raw "[ \t]+" t))))
+    token))
+
+(defun majutsu-git--wash-remote-list (_args)
+  "Wash `jj git remote list' output into remote sections."
+  (let ((count 0))
+    (magit-wash-sequence
+     (lambda ()
+       (let* ((line (buffer-substring (line-beginning-position)
+                                      (line-end-position)))
+              (trimmed (string-trim (substring-no-properties line)))
+              (name (and (not (string-empty-p trimmed))
+                         (majutsu-git--remote-line-name line))))
+         (delete-region (line-beginning-position)
+                        (min (point-max) (1+ (line-end-position))))
+         (when name
+           (setq count (1+ count))
+           (magit-insert-section (jj-git-remote name t)
+             (magit-insert-heading line)
+             (insert "\n")))
+         t)))
+    (if (zerop count)
+        (magit-cancel-section)
+      (insert "\n"))))
+
+(defun majutsu-git-remote-list-refresh-buffer ()
+  "Refresh the git remote list buffer."
+  (majutsu--assert-mode 'majutsu-git-remote-list-mode)
+  (magit-insert-section (git-remote-list)
+    (majutsu-jj-wash #'majutsu-git--wash-remote-list nil
+      "git" "remote" "list")))
+
+(defvar-keymap majutsu-git-remote-list-mode-map
+  :doc "Keymap for `majutsu-git-remote-list-mode'."
+  :parent majutsu-mode-map)
+
+(define-derived-mode majutsu-git-remote-list-mode majutsu-mode "Majutsu Git Remotes"
+  "Major mode for viewing git remotes."
+  :group 'majutsu
+  (setq-local line-number-mode nil)
+  (setq-local revert-buffer-function #'majutsu-refresh-buffer))
 
 (defun majutsu-git-remote-add (args)
   "Add a Git remote. Prompts for name and URL; respects ARGS from transient."
@@ -99,7 +127,7 @@ This calls `jj git remote list` and parses the first word of each line."
          (cmd-args (append '("remote" "add")
                            (when fetch-tags (list fetch-tags))
                            (list remote url)))
-         (exit (apply #'majutsu-git--run cmd-args)))
+         (exit (majutsu-run-jj "git" cmd-args)))
     (when (zerop exit)
       (message "Added remote %s" remote))))
 
@@ -109,7 +137,7 @@ This calls `jj git remote list` and parses the first word of each line."
   (let ((remote (majutsu-git--read-remote "Remove remote: ")))
     (when (and remote (not (string-empty-p remote)))
       (let* ((cmd-args (list "remote" "remove" remote))
-             (exit (apply #'majutsu-git--run cmd-args)))
+             (exit (majutsu-run-jj "git" cmd-args)))
         (when (zerop exit)
           (message "Removed remote %s" remote))))))
 
@@ -120,7 +148,7 @@ This calls `jj git remote list` and parses the first word of each line."
          (new (read-string (format "New name for %s: " old))))
     (when (and (not (string-empty-p old)) (not (string-empty-p new)))
       (let* ((cmd-args (list "remote" "rename" old new))
-             (exit (apply #'majutsu-git--run cmd-args)))
+             (exit (majutsu-run-jj "git" cmd-args)))
         (when (zerop exit)
           (message "Renamed remote %s -> %s" old new))))))
 
@@ -131,7 +159,7 @@ This calls `jj git remote list` and parses the first word of each line."
          (url (read-string (format "New URL for %s: " remote))))
     (when (and (not (string-empty-p remote)) (not (string-empty-p url)))
       (let* ((cmd-args (list "remote" "set-url" remote url))
-             (exit (apply #'majutsu-git--run cmd-args)))
+             (exit (majutsu-run-jj "git" cmd-args)))
         (when (zerop exit)
           (message "Set URL for %s" remote))))))
 
@@ -165,21 +193,21 @@ Prompts for SOURCE and optional DEST; uses ARGS."
 (defun majutsu-git-export ()
   "Update the underlying Git repo with changes made in the repo."
   (interactive)
-  (let ((exit (majutsu-git--run "export")))
+  (let ((exit (majutsu-run-jj "git" "export")))
     (when (zerop exit)
       (message "Exported to Git"))))
 
 (defun majutsu-git-import ()
   "Update repo with changes made in the underlying Git repo."
   (interactive)
-  (let ((exit (majutsu-git--run "import")))
+  (let ((exit (majutsu-run-jj "git" "import")))
     (when (zerop exit)
       (message "Imported from Git"))))
 
 (defun majutsu-git-root ()
   "Show the underlying Git directory of the current repository."
   (interactive)
-  (let* ((dir (string-trim (majutsu-jj-string "git" "root"))))
+  (let* ((dir (string-trim (or (car (majutsu-jj-lines "git" "root")) ""))))
     (if (string-empty-p dir)
         (message "No underlying Git directory found")
       (kill-new dir)
