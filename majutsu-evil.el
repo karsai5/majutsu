@@ -52,25 +52,24 @@ When nil, Majutsu leaves Evil's state untouched."
           (symbol :tag "Custom state"))
   :group 'majutsu-evil)
 
-(defvar majutsu-conflict-evil-before-map
-  (let ((map (make-sparse-keymap)))
-    (dotimes (i 9)
-      (let ((n (1+ i)))
-        (define-key map (kbd (number-to-string n))
-                    (lambda () (interactive)
-                      (majutsu-conflict-keep-side n t)))))
-    map)
-  "Keymap for selecting the before state in JJ conflicts.")
+(defun majutsu-evil--bind-conflict-side-keys (map before)
+  "Bind 1-9 in MAP to conflict side commands.
+When BEFORE is non-nil, keep the before side."
+  (dotimes (i 9)
+    (let ((n (1+ i)))
+      (keymap-set map (number-to-string n)
+                  (lambda () (interactive)
+                    (majutsu-conflict-keep-side n before))))))
 
-(defvar majutsu-conflict-evil-resolve-map
-  (let ((map (make-sparse-keymap)))
-    (dotimes (i 9)
-      (let ((n (1+ i)))
-        (define-key map (kbd (number-to-string n))
-                    (lambda () (interactive)
-                      (majutsu-conflict-keep-side n nil)))))
-    map)
-  "Keymap for JJ conflict actions under Evil.")
+(defvar-keymap majutsu-conflict-evil-before-map
+  :doc "Keymap for selecting the before state in JJ conflicts.")
+
+(majutsu-evil--bind-conflict-side-keys majutsu-conflict-evil-before-map t)
+
+(defvar-keymap majutsu-conflict-evil-resolve-map
+  :doc "Keymap for JJ conflict actions under Evil.")
+
+(majutsu-evil--bind-conflict-side-keys majutsu-conflict-evil-resolve-map nil)
 
 (defun majutsu-evil--define-keys (states keymap &rest bindings)
   "Define Evil BINDINGS for each state in STATES on KEYMAP.
@@ -168,6 +167,9 @@ This mirrors `evil-collection-magit-adjust-section-bindings'."
     (kbd "Y") #'majutsu-duplicate-dwim)
 
   (majutsu-evil--define-keys '(normal visual) 'majutsu-diff-mode-map
+    (kbd "+") #'majutsu-diff-more-context
+    (kbd "=") #'majutsu-diff-less-context
+    (kbd "~") #'majutsu-diff-default-context
     (kbd "g d") #'majutsu-jump-to-diffstat-or-diff
     (kbd "C-<return>") #'majutsu-diff-visit-workspace-file)
 
@@ -197,6 +199,8 @@ This mirrors `evil-collection-magit-adjust-section-bindings'."
 
   (majutsu-evil--define-keys '(normal visual motion) 'majutsu-log-mode-map
     (kbd ".") #'majutsu-log-goto-@
+    (kbd "[") #'majutsu-log-goto-parent
+    (kbd "]") #'majutsu-log-goto-child
     (kbd "O") #'majutsu-new-dwim
     (kbd "I") #'majutsu-new-with-before
     (kbd "A") #'majutsu-new-with-after)

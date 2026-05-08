@@ -177,6 +177,7 @@ a jj-commit section, add --revision from that section."
 
 ;;;; Prefix
 
+;;;###autoload(autoload 'majutsu-squash "majutsu-squash" nil t)
 (transient-define-prefix majutsu-squash ()
   "Internal transient for jj squash operations."
   :man-page "jj-squash"
@@ -214,6 +215,7 @@ a jj-commit section, add --revision from that section."
     (majutsu-transient-arg-ignore-immutable)]
    ["Actions"
     ("s" "Execute squash" majutsu-squash-execute)
+    ("RET" "Execute squash" majutsu-squash-execute)
     ("q" "Quit" transient-quit-one)]]
   (interactive)
   (transient-setup

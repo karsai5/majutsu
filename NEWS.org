@@ -5,18 +5,86 @@
 
 ** Added
 
-- Add ~majutsu-revert~ transient for =jj revert= with source revision selection
-  and destination placement options (=--onto= / =--insert-after= /
-  =--insert-before=).
+- Bug references: Integrate ~bug-reference-mode~ with Majutsu log and JJ
+  description buffers, including JJ Git remote based auto-setup.
+- Bookmarks: Add ~majutsu-bookmark-advance~ for =jj bookmark advance=,
+  plus ~majutsu-bookmark-advance-to~ for the explicit =--to= form and
+  ~majutsu-bookmark-advance-patterns~ for explicit bookmark
+  name/pattern selection with the configured default target.
+- Commands: Add ~majutsu-revert~ transient for =jj revert= with source
+  revision selection and destination placement options (=--onto= /
+  =--insert-after= / =--insert-before=).
+- Commands: Add ~majutsu-metaedit~ transient for =jj metaedit=. It targets
+  a single revision from the region, point, or =@= fallback and exposes
+  metadata edit/update flags.
+- Commands: Add ~majutsu-simplify-parents~ transient with both =--source=
+  and =--revisions= options.
+- File inspection: Add ~majutsu-find-file-other-window~ and
+  ~majutsu-find-file-other-frame~ for opening blob buffers in another window
+  or frame.
+- Log: Add visible DAG relation navigation. ~[~ jumps to a parent revision and
+  ~]~ jumps to a child revision, prompting when multiple visible targets exist.
+- Log: Add semantic copy commands under the log dispatcher copy submenu for
+  section values, rendered fields, hidden entry fields, commit hashes, and
+  visible modules.
+- JJ descriptions: Add save/history/search/diff commands for description
+  buffers, including ~majutsu-jjdescription-save-message~,
+  ~majutsu-jjdescription-prev-message~,
+  ~majutsu-jjdescription-next-message~,
+  ~majutsu-jjdescription-search-message-backward~,
+  ~majutsu-jjdescription-search-message-forward~, and
+  ~majutsu-jjdescription-show-diff~.
+- Template DSL: Add first-class anonymous functions, concise
+  ~[:|arg| body]~ syntax, compile-time lambda application, and
+  ~majutsu-template-defspecial~.
 
 ** Changed
 
+- Workspace: Workspace lists now show resolved roots when available and
+  treat unavailable roots as empty data instead of raw jj errors. Internally
+  this now uses one structured =jj workspace list -T= parse pipeline.
+- Log folding: Preserve display-only graph prefixes when folding and
+  unfolding log commits, including via Evil / evil-collection section
+  commands.
+- Log: Add the ~tail~ module for right-aligned auxiliary fields and use
+  display-only prefixes for graph/body indentation so ordinary copying and
+  cursor movement see semantic content.
+- Log: Store field/column/entry/decoration metadata on rendered spans and
+  always keep hidden ~id~, ~commit-id~, and ~parent-ids~ transport data
+  available for copy and relation-navigation commands.
+- Log: Repeated fields can now render differently in different modules.
+  Majutsu decodes transport values before running each column's ~:post~
+  handlers.
+- Template DSL: Rework implicit ~self~ around explicit/bindable receivers and
+  owner-bound extension definitions; local log helpers now use that lowering
+  model.
+- Template DSL: Lower higher-order forms through the core lambda/method
+  machinery and add semantic type propagation for helper arguments, method
+  chains, list elements, and deferred lambda specialization.
+- Template DSL: Align builtin helper, method, conversion, and operator
+  metadata with upstream =jj=, including option/list receivers, ~RefSymbol~,
+  literal-only parameters, ~if()~, and helper return types.
+
+** Removed
+
+- File inspection: Remove ~majutsu-find-file-at-point~; use
+  ~majutsu-find-file~, which still defaults revset/path from context.
+- Diff: Remove the dedicated ~v~ binding from diff file sections, following
+  Magit's split between explicit file commands and diff-specific visits.
+- Log: Remove ~majutsu-log-field-faces~; configure field faces directly in
+  ~majutsu-log-commit-columns~ using each field's ~:face~ property.
+
 ** Fixed
 
-- Prevent =majutsu-ediff-resolve= from auto-resolving conflicts on no-op quit,
-  and preserve partial conflict resolution by using git-style conflict markers
-  that jj can parse as still-unresolved regions. Edited merge sessions now ask
-  whether to save on quit, so users can discard edits intentionally.
+- Transients: Use a consistent ~RET~ execute binding in ~majutsu-squash~ and
+  ~majutsu-split~ while keeping ~s~.
+- Ediff: Quitting ~majutsu-ediff-resolve~ without edits no longer writes a
+  resolved result, so conflicts stay unresolved.
+- Ediff: Edited merge sessions now ask before saving, and partial
+  resolutions keep remaining conflicts as jj-parseable git-style markers.
+- Evil: Restore evil-collection-style diff-context bindings in
+  =majutsu-diff-mode=: ~+~ adds context, ~=~ removes context, and =~=
+  resets to the default.
 
 * [0.6.0] - 2026-02-09
 

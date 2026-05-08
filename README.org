@@ -25,36 +25,38 @@ efficient way to interact with JJ repositories from within Emacs.
 ** Usage
 
 1. Open a JJ repository: ~M-x majutsu~ (or ~majutsu-log~)
-2. Navigate: ~n~ / ~p~ to move between revisions
+2. Navigate: ~n~ / ~p~ to move between revisions, ~[~ / ~]~ to jump to visible parents/children
 3. Act: ~RET~ to visit, ~?~ for help
 4. In blob buffers, press ~e~ to enter editable mode; save applies via =jj diffedit= (~i~ in Evil also enters editable mode)
 5. In blob buffers, press ~b~ to annotate; ~C-c m~ opens the blob in Magit
 
 ** Essential Keybindings (Emacs / Evil)
 
-| Key       | Action               |
-|-----------+----------------------|
+| Key           | Action               |
+|---------------+----------------------|
 | ~n~ / ~j~     | Next revision        |
 | ~p~ / ~k~     | Previous revision    |
-| ~RET~       | Visit thing at point |
-| ~?~         | Show all commands    |
+| ~[~           | Go to parent         |
+| ~]~           | Go to child          |
+| ~RET~         | Visit thing at point |
+| ~?~           | Show all commands    |
 | ~g~ / ~g r~   | Refresh              |
-| ~a~         | Absorb               |
-| ~b~         | Bookmarks            |
-| ~c~         | Describe             |
-| ~C~         | Commit               |
-| ~d~         | Diff                 |
-| ~E~         | Ediff                |
-| ~e~         | Edit change          |
-| ~G~ / none  | Git                  |
-| ~k~         | Abandon              |
-| ~o~         | New                  |
-| ~r~         | Rebase               |
+| ~a~           | Absorb               |
+| ~b~           | Bookmarks            |
+| ~c~           | Describe             |
+| ~C~           | Commit               |
+| ~d~           | Diff                 |
+| ~E~           | Ediff                |
+| ~e~           | Edit change          |
+| ~G~ / none    | Git                  |
+| ~k~           | Abandon              |
+| ~o~           | New                  |
+| ~r~           | Rebase               |
 | ~V~ / ~_~     | Revert               |
-| ~R~         | Restore              |
-| ~s~         | Squash               |
-| ~S~         | Split                |
-| ~y~         | Duplicate            |
+| ~R~           | Restore              |
+| ~s~           | Squash               |
+| ~S~           | Split                |
+| ~y~           | Duplicate            |
 | ~Z~ / ~*~     | Workspaces           |
 | ~C-/~ / ~u~   | Undo                 |
 | ~C-?~ / ~C-r~ | Redo                 |
@@ -62,7 +64,7 @@ efficient way to interact with JJ repositories from within Emacs.
 * Requirements
 
 - Emacs 29.1+
-- [[https://github.com/jj-vcs/jj][Jujutsu (jj)]] v0.37.0+
+- [[https://github.com/jj-vcs/jj][Jujutsu (jj)]] v0.39.0+
 - [[https://magit.vc/][magit]], [[https://github.com/magit/transient][transient]], [[https://github.com/magit/with-editor][with-editor]]
 
 * Documentation

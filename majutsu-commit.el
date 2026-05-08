@@ -1,4 +1,4 @@
-;;; majutsu-commit.el --- Commit command for Majutsu  -*- lexical-binding: t; -*-
+;;; majutsu-commit.el --- Commit and describe commands for Majutsu  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025-2026 0WD0
 
@@ -16,6 +16,8 @@
 ;; selecting co-authors and running the git pre-commit hook.
 
 ;;; Code:
+
+(require 'majutsu)
 
 (require 'majutsu)
 (require 'majutsu-jj)

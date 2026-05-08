@@ -34,7 +34,7 @@ Instead of invoking this alias for `majutsu-log' using
 
 ;;; Dispatch Popup
 
-;;;###autoload
+;;;###autoload(autoload 'majutsu-dispatch "majutsu" nil t)
 (transient-define-prefix majutsu-dispatch ()
   "Top-level Majutsu command dispatcher."
   ["Transient and dwim commands"
@@ -43,6 +43,7 @@ Instead of invoking this alias for `majutsu-log' using
     ("t" "Tags"              majutsu-tag)
     ("c" "Describe"          majutsu-describe)
     ("C" "Commit"            majutsu-commit)
+    ("m" "Metaedit"          majutsu-metaedit)
     ("d" "Diff"              majutsu-diff)
     ("D" "Diff (dwim)"       majutsu-diff-dwim)
     ("e" "Edit change"       majutsu-edit-changeset)
@@ -52,6 +53,7 @@ Instead of invoking this alias for `majutsu-log' using
     ("o" "New"               majutsu-new)
     ("O" "New (dwim)"        majutsu-new-dwim)
     ("r" "Rebase"            majutsu-rebase)
+    ("P" "Simplify parents"  majutsu-simplify-parents)
     ("V" "Revert"            majutsu-revert)
     ("R" "Restore"           majutsu-restore)]
    [("s" "Squash"            majutsu-squash)
@@ -68,7 +70,10 @@ Instead of invoking this alias for `majutsu-log' using
     ("q" "Quit"              majutsu-mode-bury-buffer)]
    [("?" "Help"              transient-help)
     ("$" "Process buffer"    majutsu-process-buffer)]
-   [("C-x m"    "Show all key bindings"    describe-mode)]])
+   [("C-x m"    "Show all key bindings"    describe-mode)]]
+  ["Log commands"
+   :if-derived majutsu-log-mode
+   [("w" "Copy…"             majutsu-log-copy-transient)]])
 
 (provide 'majutsu)
 
@@ -87,6 +92,7 @@ Instead of invoking this alias for `majutsu-log' using
   (require 'majutsu-file)
   (require 'majutsu-annotate)
   (require 'majutsu-rebase)
+  (require 'majutsu-simplify-parents)
   (require 'majutsu-revert)
   (require 'majutsu-restore)
   (require 'majutsu-absorb)
@@ -94,6 +100,7 @@ Instead of invoking this alias for `majutsu-log' using
   (require 'majutsu-squash)
   (require 'majutsu-sparse)
   (require 'majutsu-commit)
+  (require 'majutsu-metaedit)
   (require 'majutsu-new)
   (require 'majutsu-op)
   (require 'majutsu-workspace)

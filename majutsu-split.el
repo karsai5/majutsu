@@ -143,6 +143,7 @@
 
 ;;;; Prefix
 
+;;;###autoload(autoload 'majutsu-split "majutsu-split" nil t)
 (transient-define-prefix majutsu-split ()
   "Transient for jj split operations."
   :man-page "jj-split"
@@ -174,6 +175,7 @@
     (majutsu-transient-arg-ignore-immutable)]
    ["Actions"
     ("s" "Execute split" majutsu-split-execute)
+    ("RET" "Execute split" majutsu-split-execute)
     ("q" "Quit" transient-quit-one)]]
   (interactive)
   (transient-setup

@@ -111,17 +111,17 @@ When Evil is active, also update `evil-normal-state-cursor'."
          (default-directory root)
          (file majutsu-buffer-blob-path)
          (rev majutsu-buffer-blob-revision)
-         (temp-file (make-temp-file "majutsu-blob-edit-"))
+         (temp-file (make-nearby-temp-file "majutsu-blob-edit-"))
          (editor-config (majutsu-jj--editor-command-config
                          "ui.diff-editor"
                          (concat "$right/" file)
-                         (list "cp" temp-file)))
+                         (list "cp" (majutsu-convert-filename-for-jj temp-file))))
          (args (list "diffedit"
                      "--config" editor-config
                      "--from" (concat rev "-")
                      "--to" rev
                      "--"
-                     file))
+                     (majutsu-jj-fileset-quote file)))
          exit)
     (unwind-protect
         (progn
@@ -536,14 +536,16 @@ If revision metadata moved, preserve location heuristically:
   (majutsu-find-file--internal revset path #'pop-to-buffer-same-window))
 
 ;;;###autoload
-(defun majutsu-find-file-at-point ()
-  "View file at point from the relevant revision."
-  (interactive)
-  (let* ((root (majutsu-file--root))
-         (revset (majutsu-file--default-revset))
-         (path (or (majutsu-file--path-at-point root)
-                   (majutsu-file--read-path revset root))))
-    (majutsu-find-file revset path)))
+(defun majutsu-find-file-other-window (revset path)
+  "View PATH from REVSET in another window."
+  (interactive (majutsu-find-file-read-args "Find file in other window"))
+  (majutsu-find-file--internal revset path #'switch-to-buffer-other-window))
+
+;;;###autoload
+(defun majutsu-find-file-other-frame (revset path)
+  "View PATH from REVSET in another frame."
+  (interactive (majutsu-find-file-read-args "Find file in other frame"))
+  (majutsu-find-file--internal revset path #'switch-to-buffer-other-frame))
 
 (defun majutsu-bury-or-kill-buffer (&optional bury-buffer)
   "Bury the current buffer if displayed in multiple windows, else kill it.

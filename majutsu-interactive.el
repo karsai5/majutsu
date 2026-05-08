@@ -414,7 +414,7 @@ Return a hunk string or nil when no change lines remain."
          (new-len 0)
          (has-change nil)
          (started nil)
-         (prev-included-change nil))
+         (prev-included-line nil))
     (dolist (line lines)
       (pcase-let ((`(,text ,type ,bol ,eol) line))
         (let* ((selected (if ranges
@@ -427,7 +427,7 @@ Return a hunk string or nil when no change lines remain."
                           ('context t)
                           ('added (or include-change convert-added))
                           ('removed (or include-change convert-removed))
-                          ('meta prev-included-change)
+                          ('meta prev-included-line)
                           (_ nil)))
                (old-inc (pcase type
                           ('context 1)
@@ -443,7 +443,7 @@ Return a hunk string or nil when no change lines remain."
                   (setq started t))
                 (when (and (memq type '(added removed)) include-change)
                   (setq has-change t))
-                (setq prev-included-change (and (memq type '(added removed)) include-change))
+                (setq prev-included-line (memq type '(context added removed)))
                 (cond
                  (convert-added
                   (setq old-len (1+ old-len))
@@ -460,7 +460,8 @@ Return a hunk string or nil when no change lines remain."
             (when (and (not started) (memq type '(context added removed)))
               (setq old-skip (+ old-skip old-inc))
               (setq new-skip (+ new-skip new-inc)))
-            (setq prev-included-change nil)))))
+            (unless (eq type 'meta)
+              (setq prev-included-line nil))))))
     (when (and has-change selected-lines)
       (let* ((body (mapconcat #'identity (nreverse selected-lines) ""))
              (hunk-header
@@ -590,12 +591,18 @@ Returns patch string or nil if no selections."
 (defvar majutsu-interactive--temp-dir nil
   "Temporary directory for patch files.")
 
+(defvar majutsu-interactive--temp-dir-remote nil
+  "Remote prefix associated with `majutsu-interactive--temp-dir'.")
+
 (defun majutsu-interactive--temp-dir ()
   "Return or create temporary directory."
-  (unless (and majutsu-interactive--temp-dir
-               (file-directory-p majutsu-interactive--temp-dir))
-    (setq majutsu-interactive--temp-dir
-          (make-temp-file "majutsu-interactive-" t)))
+  (let ((remote (file-remote-p default-directory)))
+    (unless (and majutsu-interactive--temp-dir
+                 (equal remote majutsu-interactive--temp-dir-remote)
+                 (file-directory-p majutsu-interactive--temp-dir))
+      (setq majutsu-interactive--temp-dir
+            (make-nearby-temp-file "majutsu-interactive-" t)
+            majutsu-interactive--temp-dir-remote remote)))
   majutsu-interactive--temp-dir)
 
 (defun majutsu-interactive--write-patch (patch)
@@ -640,12 +647,14 @@ When REVERSE is non-nil, reset $right to $left state first, then apply patch."
 (defun majutsu-interactive--build-tool-config (patch-file reverse)
   "Build jj --config arguments for applypatch tool with PATCH-FILE.
 When REVERSE is non-nil, the script will apply the patch in reverse."
-  (let ((script (majutsu-interactive--write-applypatch-script reverse)))
+  (let* ((script (majutsu-interactive--write-applypatch-script reverse))
+         (script-path (majutsu-convert-filename-for-jj script))
+         (patch-path (majutsu-convert-filename-for-jj patch-file)))
     (list
      "--config" (format "merge-tools.majutsu-applypatch.program=%s"
-                        (shell-quote-argument script))
+                        (shell-quote-argument script-path))
      "--config" (format "merge-tools.majutsu-applypatch.edit-args=[\"$left\",\"$right\",%s]"
-                        (prin1-to-string patch-file)))))
+                        (prin1-to-string patch-path)))))
 
 ;;; Pending Operation Flow
 
